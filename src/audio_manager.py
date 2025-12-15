@@ -6,6 +6,7 @@
 封装 PyAudio 的初始化和流管理，提供线程安全的音频输入输出接口。
 """
 
+import time
 import threading
 from typing import Optional, List, Dict, Any
 import numpy as np
@@ -233,7 +234,8 @@ class AudioManager:
             录制的音频数据
         """
         self.write_chunk(output_chunk)
-        return self.read_chunk()
+        read_chunk = self.read_chunk()
+        return read_chunk
     
     @property
     def is_running(self) -> bool:
