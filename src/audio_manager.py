@@ -197,7 +197,7 @@ class AudioManager:
         if self.stream is None:
             raise RuntimeError("音频读取流未打开")
         
-        in_bytes = self.stream.read(self.hop_size)
+        in_bytes = self.stream.read(self.hop_size, exception_on_overflow=False)
         return np.frombuffer(in_bytes, dtype=np.float32)
     
     def write_chunk(self, chunk: np.ndarray):
