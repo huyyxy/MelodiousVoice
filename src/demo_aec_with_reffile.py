@@ -359,10 +359,10 @@ class RealtimeAECWithRefFile:
                         out_chunk = np.pad(out_chunk, (0, self.hop_size - len(out_chunk)))
                     
                     # 2. 同步播放（阻塞式写入）
-                    stream.write(out_chunk.tobytes())
+                    stream.write(out_chunk.tobytes(), exception_on_underflow=False)
                     
                     # 3. 同步录制（阻塞式读取）
-                    in_bytes = stream.read(self.hop_size)
+                    in_bytes = stream.read(self.hop_size, exception_on_overflow=False)
                     mic_chunk = np.frombuffer(in_bytes, dtype=np.float32)
                     
                     # 4. 获取对应的参考信号（考虑延迟补偿）
