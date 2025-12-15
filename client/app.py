@@ -141,7 +141,7 @@ class AECClient:
                         break
                     
                     # Pacing to match real-time
-                    time.sleep(CHUNK_SIZE / SAMPLE_RATE)
+                    # time.sleep(CHUNK_SIZE / SAMPLE_RATE)
                     
                 print("Upload finished.")
             except Exception as e:

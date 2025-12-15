@@ -380,8 +380,8 @@ def main():
                         help='对齐阶段时长，单位秒 (默认: 2.0)')
     parser.add_argument('--max-delay', type=int, default=4800,
                         help='最大延迟（采样点数，默认: 4800，约 300ms）')
-    parser.add_argument('--queue-size', type=int, default=100,
-                        help='队列最大长度 (默认: 100)')
+    parser.add_argument('--queue-size', type=int, default=10000,
+                        help='队列最大长度 (默认: 10000)')
     
     args = parser.parse_args()
     
