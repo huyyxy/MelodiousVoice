@@ -12,6 +12,9 @@ import queue
 import time
 from typing import Optional
 import numpy as np
+import soundfile as sf
+import os
+from scipy import signal as scipy_signal
 
 from audio_manager import AudioManager
 from aec_processor import AECProcessor
@@ -268,7 +271,8 @@ class AlignmentHelper:
         delay_estimator: DelayEstimator,
         sample_rate: int = 16000,
         hop_size: int = 256,
-        align_duration: float = 2.0
+        align_duration: float = 2.0,
+        align_file: str = None
     ):
         """
         初始化对齐辅助类
@@ -285,6 +289,31 @@ class AlignmentHelper:
         self.sample_rate = sample_rate
         self.hop_size = hop_size
         self.align_duration = align_duration
+        self.align_file = align_file
+    
+    def _load_align_file(self) -> np.ndarray:
+        """加载并预处理对齐音频文件"""
+        if not os.path.exists(self.align_file):
+            print(f"警告: 对齐文件未找到: {self.align_file}，将使用白噪声")
+            return None
+        
+        try:
+            audio, sr = sf.read(self.align_file, dtype='float32')
+            
+            # 转换为单声道
+            if audio.ndim > 1:
+                audio = audio.mean(axis=1)
+            
+            # 重采样
+            if sr != self.sample_rate:
+                print(f"对齐文件重采样: {sr} Hz -> {self.sample_rate} Hz")
+                num_samples = int(len(audio) * self.sample_rate / sr)
+                audio = scipy_signal.resample(audio, num_samples).astype(np.float32)
+            
+            return audio.astype(np.float32)
+        except Exception as e:
+            print(f"加载对齐文件失败: {e}，将使用白噪声")
+            return None
     
     def generate_test_signal(self, duration: float) -> np.ndarray:
         """
@@ -297,8 +326,8 @@ class AlignmentHelper:
             测试信号
         """
         num_samples = int(duration * self.sample_rate)
-        # 生成低幅度白噪声
-        return (np.random.randn(num_samples) * 0.3).astype(np.float32)
+        # 生成较高幅度的白噪声 (0.3 -> 0.5) 以提高信噪比
+        return (np.random.randn(num_samples) * 0.5).astype(np.float32)
     
     def run_alignment(self) -> int:
         """
@@ -310,8 +339,31 @@ class AlignmentHelper:
         print(f"开始对齐阶段 ({self.align_duration}秒)...")
         print("请确保扬声器有足够音量，让麦克风能够捕获到回声...")
         
-        # 生成测试信号
-        test_signal = self.generate_test_signal(self.align_duration)
+        # 准备测试信号
+        test_signal = None
+        if self.align_file:
+            print(f"使用音频文件进行对齐: {self.align_file}")
+            test_signal = self._load_align_file()
+            
+            # 如果文件比 align_duration 短，可能需要循环或补零，或者截取
+            # 这里简单起见，如果加载成功，使用文件的长度
+            if test_signal is not None:
+                # 确保长度至少为 align_duration，如果不够则循环
+                min_samples = int(self.align_duration * self.sample_rate)
+                if len(test_signal) < min_samples:
+                     repeats = min_samples // len(test_signal) + 1
+                     test_signal = np.tile(test_signal, repeats)
+                
+                # 截取到指定时长（或者就用文件长度？）
+                # 为了保持逻辑一致性，截取到 align_duration
+                # align_samples = int(self.align_duration * self.sample_rate)
+                # test_signal = test_signal[:align_samples]
+                pass
+        
+        if test_signal is None:
+            print("使用白噪声进行对齐 (振幅 0.5)...")
+            test_signal = self.generate_test_signal(self.align_duration)
+        
         num_chunks = len(test_signal) // self.hop_size
         
         # 录制的音频

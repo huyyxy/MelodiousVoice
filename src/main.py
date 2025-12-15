@@ -61,7 +61,8 @@ class RealtimeAECServer:
         fixed_delay: int = None,
         align_duration: float = 2.0,
         max_delay: int = 4800,
-        queue_size: int = 100
+        queue_size: int = 100,
+        align_file: str = None
     ):
         """
         初始化实时回声消除服务器
@@ -78,6 +79,7 @@ class RealtimeAECServer:
             align_duration: 对齐阶段时长（秒）
             max_delay: 最大延迟（采样点数）
             queue_size: 队列最大长度
+            align_file: 对齐使用的音频文件路径
         """
         self.model_path = model_path
         self.port = port
@@ -89,6 +91,7 @@ class RealtimeAECServer:
         self.fixed_delay = fixed_delay
         self.align_duration = align_duration
         self.max_delay = max_delay
+        self.align_file = align_file
         
         # 创建线程安全队列
         self.speaker_queue = queue.Queue(maxsize=queue_size)
@@ -169,7 +172,8 @@ class RealtimeAECServer:
                 delay_estimator=self.delay_estimator,
                 sample_rate=self.sample_rate,
                 hop_size=self.hop_size,
-                align_duration=self.align_duration
+                align_duration=self.align_duration,
+                align_file=self.align_file
             )
             self.delay_samples = alignment_helper.run_alignment()
             
@@ -382,6 +386,8 @@ def main():
                         help='最大延迟（采样点数，默认: 4800，约 300ms）')
     parser.add_argument('--queue-size', type=int, default=10000,
                         help='队列最大长度 (默认: 10000)')
+    parser.add_argument('--align-file', type=str, default=None,
+                        help='用于对齐的参考音频文件路径 (默认: 使用白噪声)')
     
     args = parser.parse_args()
     
@@ -401,7 +407,8 @@ def main():
         fixed_delay=args.fixed_delay,
         align_duration=args.align_duration,
         max_delay=args.max_delay,
-        queue_size=args.queue_size
+        queue_size=args.queue_size,
+        align_file=args.align_file
     )
     
     try:
