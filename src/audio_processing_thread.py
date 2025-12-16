@@ -326,8 +326,9 @@ class AlignmentHelper:
             测试信号
         """
         num_samples = int(duration * self.sample_rate)
-        # 生成较高幅度的白噪声 (0.3 -> 0.5) 以提高信噪比
-        return (np.random.randn(num_samples) * 0.5).astype(np.float32)
+        # 生成白噪声的幅度 越高则信噪比越高
+        white_noise_amplitude = 0.5
+        return (np.random.randn(num_samples) * white_noise_amplitude).astype(np.float32)
     
     def run_alignment(self) -> int:
         """
