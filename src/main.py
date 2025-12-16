@@ -27,7 +27,7 @@ import time
 import numpy as np
 import tornado.ioloop
 
-from delay_estimator import create_delay_estimator, GCCPHATDelayEstimator
+from delay_estimator import create_delay_estimator
 from aec_processor import create_aec_processor
 from audio_manager import AudioManager
 from audio_processing_thread import AudioProcessingThread, AlignmentHelper
@@ -131,21 +131,27 @@ class RealtimeAECServer:
         
         # 1. 创建延迟估计器
         logger.info("创建延迟估计器...")
-        self.delay_estimator = create_delay_estimator(
-            fixed_delay=self.fixed_delay,
-            interp=1,
-            offset_seconds=0.001
-        )
+        if self.fixed_delay is not None:
+            self.delay_estimator = create_delay_estimator(
+                type="fixed",
+                delay_samples=self.fixed_delay
+            )
+        else:
+            self.delay_estimator = create_delay_estimator(
+                type="gcc_phat",
+                interp=1,
+                offset_seconds=0.001
+            )
         logger.info(f"延迟估计器: {self.delay_estimator.get_name()}")
         
         # 2. 创建 AEC 处理器
         logger.info("加载 NKF 模型...")
         model_path = self._resolve_model_path(self.model_path)
         self.aec_processor = create_aec_processor(
+            type="nkf",
             model_path=model_path,
             block_size=self.block_size,
-            hop_size=self.hop_size,
-            device='cpu'
+            hop_size=self.hop_size
         )
         logger.info(f"AEC 处理器: {self.aec_processor.get_name()}")
         

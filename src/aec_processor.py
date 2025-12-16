@@ -162,33 +162,36 @@ class PassthroughProcessor(AECProcessor):
         return "Passthrough"
 
 
-def create_aec_processor(
-    model_path: str,
-    block_size: int = 1024,
-    hop_size: int = 256,
-    device: str = 'cpu',
-    passthrough: bool = False
-) -> AECProcessor:
+def create_aec_processor(type: str, **kwargs) -> AECProcessor:
     """
     工厂函数：创建回声消除处理器
     
     Args:
-        model_path: NKF 模型权重文件路径
-        block_size: STFT 窗口大小
-        hop_size: 每次处理的样本数
-        device: 计算设备
-        passthrough: 是否使用直通模式（用于测试）
+        type: 处理器类型，支持 "nkf" 或 "passthrough"
+        **kwargs: 传递给对应处理器的参数
+            - NKFAECProcessor (type="nkf"):
+                - model_path: str, NKF 模型权重文件路径
+                - block_size: int, STFT 窗口大小 (默认 1024)
+                - hop_size: int, 每次处理的样本数 (默认 256)
+                - device: str, 计算设备 (默认 'cpu')
+            - PassthroughProcessor (type="passthrough"):
+                - hop_size: int, 每次处理的样本数 (默认 256)
         
     Returns:
         AECProcessor 实例
+        
+    Raises:
+        ValueError: 不支持的处理器类型
     """
-    if passthrough:
-        return PassthroughProcessor(hop_size=hop_size)
-    else:
-        return NKFAECProcessor(
-            model_path=model_path,
-            block_size=block_size,
-            hop_size=hop_size,
-            device=device
-        )
+    processor_map = {
+        "nkf": NKFAECProcessor,
+        "passthrough": PassthroughProcessor,
+    }
+    
+    if type not in processor_map:
+        supported_types = ", ".join(processor_map.keys())
+        raise ValueError(f"不支持的处理器类型: {type}，支持的类型: {supported_types}")
+    
+    processor_class = processor_map[type]
+    return processor_class(**kwargs)
 

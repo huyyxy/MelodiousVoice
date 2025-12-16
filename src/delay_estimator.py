@@ -130,20 +130,34 @@ class FixedDelayEstimator(DelayEstimator):
         return f"Fixed({self.delay_samples} samples)"
 
 
-def create_delay_estimator(fixed_delay: int = None, interp: int = 1, offset_seconds: float = 0.001) -> DelayEstimator:
+def create_delay_estimator(type: str, **kwargs) -> DelayEstimator:
     """
     工厂函数：创建延迟估计器
     
     Args:
-        fixed_delay: 固定延迟值（采样点），如果指定则返回 FixedDelayEstimator
-        interp: GCC-PHAT 插值倍数
-        offset_seconds: GCC-PHAT 偏移补偿
+        type: 估计器类型，支持 "gcc_phat" 或 "fixed"
+        **kwargs: 传递给对应估计器的参数
+            - GCCPHATDelayEstimator (type="gcc_phat"):
+                - interp: int, 插值倍数，用于提高精度 (默认 1)
+                - offset_seconds: float, 偏移量（秒），用于补偿算法误差 (默认 0.001)
+            - FixedDelayEstimator (type="fixed"):
+                - delay_samples: int, 固定延迟值（采样点数）
         
     Returns:
         DelayEstimator 实例
+        
+    Raises:
+        ValueError: 不支持的估计器类型
     """
-    if fixed_delay is not None:
-        return FixedDelayEstimator(fixed_delay)
-    else:
-        return GCCPHATDelayEstimator(interp=interp, offset_seconds=offset_seconds)
+    estimator_map = {
+        "gcc_phat": GCCPHATDelayEstimator,
+        "fixed": FixedDelayEstimator,
+    }
+    
+    if type not in estimator_map:
+        supported_types = ", ".join(estimator_map.keys())
+        raise ValueError(f"不支持的估计器类型: {type}，支持的类型: {supported_types}")
+    
+    estimator_class = estimator_map[type]
+    return estimator_class(**kwargs)
 
