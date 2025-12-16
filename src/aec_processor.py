@@ -171,8 +171,6 @@ def create_aec_processor(type: str, **kwargs) -> AECProcessor:
         **kwargs: 传递给对应处理器的参数
             - NKFAECProcessor (type="nkf"):
                 - model_path: str, NKF 模型权重文件路径
-                - block_size: int, STFT 窗口大小 (默认 1024)
-                - hop_size: int, 每次处理的样本数 (默认 256)
                 - device: str, 计算设备 (默认 'cpu')
             - PassthroughProcessor (type="passthrough"):
                 - hop_size: int, 每次处理的样本数 (默认 256)

@@ -54,8 +54,6 @@ class RealtimeAECServer:
         model_path: str,
         port: int = 8765,
         sample_rate: int = 16000,
-        hop_size: int = 256,
-        block_size: int = 1024,
         mic_device_idx: int = None,
         speaker_device_idx: int = None,
         fixed_delay: int = None,
@@ -71,8 +69,6 @@ class RealtimeAECServer:
             model_path: NKF 模型权重文件路径
             port: WebSocket 服务器端口
             sample_rate: 采样率 (Hz)
-            hop_size: 每次处理的样本数
-            block_size: STFT 窗口大小
             mic_device_idx: 麦克风设备索引（None 表示使用默认设备）
             speaker_device_idx: 扬声器设备索引（None 表示使用默认设备）
             fixed_delay: 固定延迟值（采样点），如果指定则跳过自动对齐
@@ -84,8 +80,8 @@ class RealtimeAECServer:
         self.model_path = model_path
         self.port = port
         self.sample_rate = sample_rate
-        self.hop_size = hop_size
-        self.block_size = block_size
+        self.hop_size = 256
+        self.block_size = 1024
         self.mic_device_idx = mic_device_idx
         self.speaker_device_idx = speaker_device_idx
         self.fixed_delay = fixed_delay
@@ -376,10 +372,6 @@ def main():
                         help='WebSocket 服务器端口（默认: 8765）')
     parser.add_argument('--sample-rate', type=int, default=16000,
                         help='采样率 (默认: 16000)')
-    parser.add_argument('--hop-size', type=int, default=256,
-                        help='每次处理的样本数 (默认: 256)')
-    parser.add_argument('--block-size', type=int, default=1024,
-                        help='STFT 窗口大小 (默认: 1024)')
     parser.add_argument('--mic-device', type=int, default=None,
                         help='麦克风设备索引（不指定则使用系统默认）')
     parser.add_argument('--speaker-device', type=int, default=None,
@@ -406,8 +398,6 @@ def main():
         model_path=args.model,
         port=args.port,
         sample_rate=args.sample_rate,
-        hop_size=args.hop_size,
-        block_size=args.block_size,
         mic_device_idx=args.mic_device,
         speaker_device_idx=args.speaker_device,
         fixed_delay=args.fixed_delay,
