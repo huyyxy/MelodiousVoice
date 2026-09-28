@@ -6,6 +6,7 @@
 提供回声消除的抽象基类和具体实现：
 - AECProcessor: 抽象基类
 - NKFAECProcessor: 基于 NKF 模型的回声消除处理器
+- NLMSAECProcessor: 基于 NLMS 自适应滤波的回声消除处理器（类似 WebRTC AEC）
 """
 
 import os
@@ -15,6 +16,12 @@ import torch
 
 from nkf import NKF
 from nkf_streaming import NKFStreaming
+
+try:
+    from padasip.filters import FilterNLMS
+    HAS_PADASIP = True
+except ImportError:
+    HAS_PADASIP = False
 
 
 class AECProcessor(ABC):
@@ -162,16 +169,156 @@ class PassthroughProcessor(AECProcessor):
         return "Passthrough"
 
 
+class NLMSAECProcessor(AECProcessor):
+    """
+    基于 NLMS（归一化最小均方）自适应滤波的回声消除处理器
+    
+    使用 NLMS 算法进行回声消除，这是 WebRTC AEC 的核心算法之一。
+    NLMS 通过自适应地估计回声路径的冲激响应来消除回声。
+    
+    特点：
+    - 计算效率高，适合实时处理
+    - 收敛速度快于 LMS
+    - 无需 GPU，纯 CPU 处理
+    - 支持流式处理
+    """
+    
+    def __init__(
+        self,
+        hop_size: int = 256,
+        filter_length: int = 2048,
+        mu: float = 0.5,
+        eps: float = 1e-6,
+        sample_rate: int = 16000
+    ):
+        """
+        初始化 NLMS 回声消除处理器
+        
+        Args:
+            hop_size: 每次处理的样本数
+            filter_length: 自适应滤波器长度（采样点数），决定了可消除的最大回声延迟
+                          建议设置为约 128ms 的样本数（16kHz 采样率下约 2048）
+            mu: 步长参数（学习率），范围 0-2，越大收敛越快但可能不稳定
+            eps: 正则化项，防止除零
+            sample_rate: 采样率（仅用于信息显示）
+        """
+        if not HAS_PADASIP:
+            raise ImportError(
+                "NLMSAECProcessor 需要 padasip 库，请安装: pip install padasip"
+            )
+        
+        self.hop_size = hop_size
+        self.filter_length = filter_length
+        self.mu = mu
+        self.eps = eps
+        self.sample_rate = sample_rate
+        
+        # 初始化滤波器
+        self._init_filter()
+        
+        # 参考信号历史缓冲区（用于构建滤波器输入向量）
+        self.ref_history = np.zeros(filter_length, dtype=np.float32)
+    
+    def _init_filter(self):
+        """初始化 NLMS 滤波器"""
+        self.filter = FilterNLMS(
+            n=self.filter_length,
+            mu=self.mu,
+            eps=self.eps,
+            w="zeros"
+        )
+    
+    def process_chunk(self, mic_chunk: np.ndarray, ref_chunk: np.ndarray) -> np.ndarray:
+        """
+        处理一个音频块
+        
+        算法流程：
+        1. 更新参考信号历史
+        2. 对于每个样本：
+           a. 使用滤波器预测回声
+           b. 从麦克风信号中减去预测的回声
+           c. 使用误差信号更新滤波器权重
+        
+        Args:
+            mic_chunk: 麦克风输入（包含回声的近端信号）
+            ref_chunk: 参考信号（远端信号，播放到扬声器的音频）
+            
+        Returns:
+            回声消除后的音频块
+        """
+        if len(mic_chunk) != self.hop_size:
+            raise ValueError(f"mic_chunk 长度必须为 {self.hop_size}，实际为 {len(mic_chunk)}")
+        if len(ref_chunk) != self.hop_size:
+            raise ValueError(f"ref_chunk 长度必须为 {self.hop_size}，实际为 {len(ref_chunk)}")
+        
+        # 确保输入是 float32
+        mic = mic_chunk.astype(np.float32)
+        ref = ref_chunk.astype(np.float32)
+        
+        # 输出缓冲区
+        output = np.zeros(self.hop_size, dtype=np.float32)
+        
+        # 逐样本处理
+        for i in range(self.hop_size):
+            # 更新参考信号历史（移位并添加新样本）
+            self.ref_history = np.roll(self.ref_history, 1)
+            self.ref_history[0] = ref[i]
+            
+            # 使用 NLMS 滤波器预测回声
+            echo_estimate = self.filter.predict(self.ref_history)
+            
+            # 误差信号 = 麦克风信号 - 预测回声（这就是回声消除后的信号）
+            error = mic[i] - echo_estimate
+            output[i] = error
+            
+            # 更新滤波器权重
+            self.filter.adapt(mic[i], self.ref_history)
+        
+        return output
+    
+    def reset_state(self):
+        """重置内部状态"""
+        self._init_filter()
+        self.ref_history.fill(0)
+    
+    def get_name(self) -> str:
+        return "NLMS-AEC"
+    
+    def get_filter_info(self) -> dict:
+        """
+        获取滤波器信息
+        
+        Returns:
+            包含滤波器参数和状态的字典
+        """
+        max_delay_ms = self.filter_length / self.sample_rate * 1000
+        return {
+            "filter_length": self.filter_length,
+            "max_delay_ms": max_delay_ms,
+            "mu": self.mu,
+            "eps": self.eps,
+            "hop_size": self.hop_size
+        }
+
+
 def create_aec_processor(type: str, **kwargs) -> AECProcessor:
     """
     工厂函数：创建回声消除处理器
     
     Args:
-        type: 处理器类型，支持 "nkf" 或 "passthrough"
+        type: 处理器类型，支持 "nkf"、"nlms" 或 "passthrough"
         **kwargs: 传递给对应处理器的参数
             - NKFAECProcessor (type="nkf"):
                 - model_path: str, NKF 模型权重文件路径
+                - block_size: int, STFT 窗口大小 (默认 1024)
+                - hop_size: int, 每次处理的样本数 (默认 256)
                 - device: str, 计算设备 (默认 'cpu')
+            - NLMSAECProcessor (type="nlms"):
+                - hop_size: int, 每次处理的样本数 (默认 256)
+                - filter_length: int, 滤波器长度 (默认 2048)
+                - mu: float, 步长参数 (默认 0.5)
+                - eps: float, 正则化项 (默认 1e-6)
+                - sample_rate: int, 采样率 (默认 16000)
             - PassthroughProcessor (type="passthrough"):
                 - hop_size: int, 每次处理的样本数 (默认 256)
         
@@ -180,9 +327,11 @@ def create_aec_processor(type: str, **kwargs) -> AECProcessor:
         
     Raises:
         ValueError: 不支持的处理器类型
+        ImportError: 缺少必要的依赖库
     """
     processor_map = {
         "nkf": NKFAECProcessor,
+        "nlms": NLMSAECProcessor,
         "passthrough": PassthroughProcessor,
     }
     

@@ -142,12 +142,15 @@ class RealtimeAECServer:
         
         # 2. 创建 AEC 处理器
         logger.info("加载 NKF 模型...")
-        model_path = self._resolve_model_path(self.model_path)
+        # model_path = self._resolve_model_path(self.model_path)
+        # self.aec_processor = create_aec_processor(
+        #     type="nkf",
+        #     model_path=model_path,
+        #     block_size=self.block_size,
+        #     hop_size=self.hop_size
+        # )
         self.aec_processor = create_aec_processor(
-            type="nkf",
-            model_path=model_path,
-            block_size=self.block_size,
-            hop_size=self.hop_size
+            type="nlms"
         )
         logger.info(f"AEC 处理器: {self.aec_processor.get_name()}")
         
